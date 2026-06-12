@@ -56,7 +56,7 @@ class VLLMProcessManager:
             "--port", str(port),
             "--gpu-memory-utilization", str(gpu_memory_utilization),
             "--max-model-len", str(max_model_len),
-            "--disable-log-requests"
+            "--no-enable-log-requests"
         ]
 
         logger.info(f"Starting vLLM instance '{name}' on port {port}...")
@@ -80,18 +80,24 @@ class VLLMProcessManager:
         )
         return process
 
-    def wait_for_healthy(self, host: str, port: int, timeout: int = 300) -> bool:
+    def wait_for_healthy(self, host: str, port: int, timeout: int = 300, process: subprocess.Popen | None = None) -> bool:
         """Poll the health/v1/models endpoint until healthy or timeout."""
         start_time = time.time()
         url = f"http://{host}:{port}/v1/models"
         logger.info(f"Waiting for vLLM server on {url} to become healthy...")
         
         while time.time() - start_time < timeout:
+            if process is not None and process.poll() is not None:
+                return_code = process.poll()
+                logger.error(f"vLLM process for port {port} terminated unexpectedly with exit code {return_code}.")
+                return False
+
             try:
                 with httpx.Client() as client:
                     response = client.get(url, timeout=2.0)
                     if response.status_code == 200:
-                        logger.info(f"vLLM server on port {port} is healthy and model is loaded!")
+                        elapsed_time = time.time() - start_time
+                        logger.info(f"vLLM server on port {port} is healthy and model is loaded! (Took {elapsed_time:.2f} seconds)")
                         return True
             except httpx.RequestError:
                 pass
@@ -101,7 +107,7 @@ class VLLMProcessManager:
         return False
 
     def start_all(self):
-        """Start both vLLM instances and wait for them to become healthy."""
+        """Start both vLLM instances sequentially and wait for them to become healthy."""
         if configs.MOCK_VLLM:
             logger.info("MOCK_VLLM is set to True. Skipping starting actual vLLM subprocesses.")
             return
@@ -110,7 +116,7 @@ class VLLMProcessManager:
             logger.info("START_VLLM_ON_STARTUP is set to False. Skipping vLLM startup.")
             return
 
-        logger.info("Initializing vLLM instances...")
+        logger.info("Initializing vLLM instances sequentially...")
         
         # Instance 1 (Type 1)
         self.process_type1 = self.start_vllm_instance(
@@ -123,25 +129,29 @@ class VLLMProcessManager:
             log_file=self.log_dir / "vllm_type1.log"
         )
         
-        # Instance 2 (Type 2)
-        self.process_type2 = self.start_vllm_instance(
-            name="Type 2 Server",
-            host=configs.VLLM_HOST_TYPE2,
-            port=configs.VLLM_PORT_TYPE2,
-            model_name=configs.model_name_type2,
-            gpu_memory_utilization=configs.gpu_memory_utilization_type2,
-            max_model_len=configs.max_model_len_type2,
-            log_file=self.log_dir / "vllm_type2.log"
-        )
-
-        # Wait for them to load the models and become healthy
+        # Wait for Instance 1 to be healthy before starting Instance 2
         h1 = True
-        h2 = True
         if self.process_type1 is not None or self.is_port_in_use(configs.VLLM_HOST_TYPE1, configs.VLLM_PORT_TYPE1):
-            h1 = self.wait_for_healthy(configs.VLLM_HOST_TYPE1, configs.VLLM_PORT_TYPE1, configs.VLLM_STARTUP_TIMEOUT_SECONDS)
+            h1 = self.wait_for_healthy(configs.VLLM_HOST_TYPE1, configs.VLLM_PORT_TYPE1, configs.VLLM_STARTUP_TIMEOUT_SECONDS, self.process_type1)
         
-        if self.process_type2 is not None or self.is_port_in_use(configs.VLLM_HOST_TYPE2, configs.VLLM_PORT_TYPE2):
-            h2 = self.wait_for_healthy(configs.VLLM_HOST_TYPE2, configs.VLLM_PORT_TYPE2, configs.VLLM_STARTUP_TIMEOUT_SECONDS)
+        h2 = True
+        if h1:
+            # Instance 2 (Type 2)
+            self.process_type2 = self.start_vllm_instance(
+                name="Type 2 Server",
+                host=configs.VLLM_HOST_TYPE2,
+                port=configs.VLLM_PORT_TYPE2,
+                model_name=configs.model_name_type2,
+                gpu_memory_utilization=configs.gpu_memory_utilization_type2,
+                max_model_len=configs.max_model_len_type2,
+                log_file=self.log_dir / "vllm_type2.log"
+            )
+            
+            if self.process_type2 is not None or self.is_port_in_use(configs.VLLM_HOST_TYPE2, configs.VLLM_PORT_TYPE2):
+                h2 = self.wait_for_healthy(configs.VLLM_HOST_TYPE2, configs.VLLM_PORT_TYPE2, configs.VLLM_STARTUP_TIMEOUT_SECONDS, self.process_type2)
+        else:
+            logger.warning("Skipping starting Type 2 Server because Type 1 Server failed to start.")
+            h2 = False
 
         if not (h1 and h2):
             logger.warning("One or both vLLM instances failed to start or load models successfully.")
