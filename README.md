@@ -18,6 +18,7 @@ The setup is optimized to handle two different types of tasks:
    - `infrastructure`: Implements details for configuration, vLLM subprocesses, and HTTP clients.
    - `presentation`: Exposes RESTful APIs via FastAPI.
 4. **Mocking Mode (`MOCK_VLLM`)**: Support for development/testing on machines without a GPU (Local/CPU) by mimicking model outputs.
+5. **Fast Dependency Management**: Optimized for **[uv](https://github.com/astral-sh/uv)**, the extremely fast Python package installer and resolver.
 
 ---
 
@@ -27,25 +28,34 @@ The setup is optimized to handle two different types of tasks:
 - Operating System: Linux (Ubuntu recommended).
 - Python: Version `3.9` or higher (`3.10` / `3.11` recommended).
 - CUDA Toolkit (if deploying with actual vLLM instances on GPU).
+- **uv** installed on your system.
+  > [!TIP]
+  > If you don't have `uv` installed, you can install it via:
+  > ```bash
+  > curl -LsSf https://astral.sh/uv/install.sh | sh
+  > ```
 
 ### Installation Steps
 
 1. **Create a Virtual Environment**
+   Using `uv` to create a virtual environment is near-instantaneous:
    ```bash
    # Create a virtual environment named .venv
-   python3 -m venv .venv
-   
-   # Activate the virtual environment
+   uv venv
+   ```
+
+2. **Activate the Virtual Environment**
+   ```bash
    source .venv/bin/activate
    ```
 
-2. **Upgrade pip and Install Dependencies**
+3. **Install Dependencies**
+   Use `uv pip` to install the requirements at lightning speed:
    ```bash
-   pip install --upgrade pip
-   pip install -r requirements.txt
+   uv pip install -r requirements.txt
    ```
 
-3. **Configure Environment Variables**
+4. **Configure Environment Variables**
    Copy the example environment configuration file:
    ```bash
    cp .env.example .env
@@ -60,19 +70,29 @@ The setup is optimized to handle two different types of tasks:
 
 ## 🏃 Running the Application
 
-### Step 1: Start the FastAPI Server
+There are two ways to run commands using `uv`:
 
-Once the virtual environment is activated, run:
+### Option A: With Activated Virtual Environment
+
+If you have activated the virtual environment (`source .venv/bin/activate`), run:
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+### Option B: Directly using `uv run` (Recommended)
+
+You can run the application directly without manual activation. `uv run` will automatically use the `.venv` environment:
+
+```bash
+uv run uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 > [!NOTE]
 > - If `START_VLLM_ON_STARTUP=true` and `MOCK_VLLM=false`, FastAPI will start downloading the models from Hugging Face (if not cached) and launch the vLLM subprocesses on ports `8001` and `8002`. This process might take several minutes.
 > - If you want the server to auto-reload on code changes, add the `--reload` flag. Keep in mind that every reload will restart the underlying vLLM processes.
 
-### Step 2: Check System Health
+### Check System Health
 
 Verify that the API server and both vLLM instances are online using the `/health` endpoint:
 
@@ -89,7 +109,7 @@ curl http://localhost:8000/health
 }
 ```
 
-### Step 3: Interactive API Docs (Swagger UI)
+### Interactive API Docs (Swagger UI)
 Visit the API docs page in your browser:
 👉 **[http://localhost:8000/docs](http://localhost:8000/docs)** to explore endpoints and test requests interactively.
 
@@ -99,10 +119,14 @@ Visit the API docs page in your browser:
 
 A test script `test_predict.py` is included to easily send requests to the `/predict` endpoint.
 
-Open another terminal session (activate `.venv`) and run:
+Run the script using one of the following commands:
 
 ```bash
+# If virtual environment is activated
 python test_predict.py
+
+# Alternatively, using uv run directly
+uv run python test_predict.py
 ```
 
 The script automatically sends three payloads:
