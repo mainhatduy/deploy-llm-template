@@ -65,7 +65,7 @@ The setup is optimized to handle two different types of tasks:
 Once the virtual environment is activated, run:
 
 ```bash
-uvicorn src.main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --host 0.0.0.0 --port 8000
 ```
 
 > [!NOTE]
@@ -114,17 +114,21 @@ The script automatically sends three payloads:
 
 ## 📁 Directory Structure
 
+The project directory structure follows the layout of `jujumilk3/fastapi-clean-architecture`:
+
 ```text
 .
-├── src/
-│   ├── domain/               # Domain models and service interfaces
-│   ├── use_cases/            # Core business logic (PredictUseCase)
-│   ├── infrastructure/       # vLLM integration, configuration, and subprocess manager
-│   │   ├── config/           # Pydantic settings parsing the .env file
-│   │   ├── llm/              # Async OpenAI client integration with vLLM
-│   │   └── process/          # Subprocess manager starting/stopping vLLM instances
-│   ├── presentation/         # FastAPI router and endpoints definition
-│   └── main.py               # Application entrypoint & lifespan lifecycle hooks
+├── app/
+│   ├── api/                  # API routers (presentation layer)
+│   │   └── v1/
+│   │       ├── endpoints/    # Route controllers/handlers (e.g., predict.py)
+│   │       └── routes.py     # Endpoint router registrations
+│   ├── core/                 # Shared system components (e.g., container.py, config.py)
+│   ├── repository/           # Data adapters / service clients (e.g., vllm_repository.py)
+│   ├── schema/               # Pydantic schemas (DTO validation layer, e.g., predict_schema.py)
+│   ├── services/             # Application services / business logic (e.g., predict_service.py)
+│   ├── util/                 # Utility helpers (e.g., vllm_process_manager.py)
+│   └── main.py               # FastAPI entry point & container setup
 ├── logs/                     # Stdout and stderr logs for vLLM subprocesses
 ├── .env.example              # Sample environment configuration template
 ├── requirements.txt          # Python dependencies

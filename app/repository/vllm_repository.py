@@ -1,23 +1,21 @@
 import json
 import logging
-from typing import Dict, Any, List
 import httpx
 from openai import AsyncOpenAI
-from src.domain.models.predict import PredictRequest, PredictResponse
-from src.domain.services.llm_service import ILLMService
-from src.infrastructure.config.settings import settings
+from app.schema.predict_schema import PredictRequest, PredictResponse
+from app.core.config import configs
 
 logger = logging.getLogger(__name__)
 
-class VLLMServiceImpl(ILLMService):
+class VLLMRepository:
     def __init__(self):
         # Initialize two clients pointing to different ports
         self.client_type1 = AsyncOpenAI(
-            base_url=f"http://{settings.VLLM_HOST_TYPE1}:{settings.VLLM_PORT_TYPE1}/v1",
+            base_url=f"http://{configs.VLLM_HOST_TYPE1}:{configs.VLLM_PORT_TYPE1}/v1",
             api_key="empty-key-for-vllm"
         )
         self.client_type2 = AsyncOpenAI(
-            base_url=f"http://{settings.VLLM_HOST_TYPE2}:{settings.VLLM_PORT_TYPE2}/v1",
+            base_url=f"http://{configs.VLLM_HOST_TYPE2}:{configs.VLLM_PORT_TYPE2}/v1",
             api_key="empty-key-for-vllm"
         )
         self._model_name_type1 = None
@@ -29,7 +27,7 @@ class VLLMServiceImpl(ILLMService):
         if cached_name:
             return cached_name
 
-        fallback_name = settings.model_name_type1 if is_type1 else settings.model_name_type2
+        fallback_name = configs.model_name_type1 if is_type1 else configs.model_name_type2
         try:
             models = await client.models.list()
             if models.data:
@@ -46,7 +44,7 @@ class VLLMServiceImpl(ILLMService):
         return fallback_name
 
     async def predict_type1(self, request: PredictRequest) -> PredictResponse:
-        if settings.MOCK_VLLM:
+        if configs.MOCK_VLLM:
             logger.info(f"MOCK_VLLM is enabled. Mocking Type 1 prediction for query_id={request.query_id}...")
             query_lower = request.query.lower()
             if "eligible for graduation" in query_lower:
@@ -72,7 +70,7 @@ class VLLMServiceImpl(ILLMService):
         model = await self._resolve_model_name(self.client_type1, is_type1=True)
 
         try:
-            logger.info(f"Sending Type 1 chat completion request to vLLM on port {settings.VLLM_PORT_TYPE1}...")
+            logger.info(f"Sending Type 1 chat completion request to vLLM on port {configs.VLLM_PORT_TYPE1}...")
             chat_response = await self.client_type1.chat.completions.create(
                 model=model,
                 messages=[
@@ -112,7 +110,7 @@ class VLLMServiceImpl(ILLMService):
             )
 
     async def predict_type2(self, request: PredictRequest) -> PredictResponse:
-        if settings.MOCK_VLLM:
+        if configs.MOCK_VLLM:
             logger.info(f"MOCK_VLLM is enabled. Mocking Type 2 prediction for query_id={request.query_id}...")
             query_lower = request.query.lower()
             if "resistors" in query_lower and "parallel" in query_lower:
@@ -130,7 +128,7 @@ class VLLMServiceImpl(ILLMService):
         model = await self._resolve_model_name(self.client_type2, is_type1=False)
 
         try:
-            logger.info(f"Sending Type 2 chat completion request to vLLM on port {settings.VLLM_PORT_TYPE2}...")
+            logger.info(f"Sending Type 2 chat completion request to vLLM on port {configs.VLLM_PORT_TYPE2}...")
             chat_response = await self.client_type2.chat.completions.create(
                 model=model,
                 messages=[
@@ -170,12 +168,12 @@ class VLLMServiceImpl(ILLMService):
 
     async def check_health(self) -> bool:
         """Check if both vLLM servers are responding and healthy."""
-        if settings.MOCK_VLLM:
+        if configs.MOCK_VLLM:
             return True
         try:
             async with httpx.AsyncClient() as client:
-                res1 = await client.get(f"http://{settings.VLLM_HOST_TYPE1}:{settings.VLLM_PORT_TYPE1}/health")
-                res2 = await client.get(f"http://{settings.VLLM_HOST_TYPE2}:{settings.VLLM_PORT_TYPE2}/health")
+                res1 = await client.get(f"http://{configs.VLLM_HOST_TYPE1}:{configs.VLLM_PORT_TYPE1}/health")
+                res2 = await client.get(f"http://{configs.VLLM_HOST_TYPE2}:{configs.VLLM_PORT_TYPE2}/health")
                 return res1.status_code == 200 and res2.status_code == 200
         except Exception:
             return False

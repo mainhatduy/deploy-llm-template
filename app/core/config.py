@@ -1,7 +1,8 @@
 import os
+from typing import List
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-class Settings(BaseSettings):
+class Configs(BaseSettings):
     # API configuration
     HOST: str = "0.0.0.0"
     PORT: int = 8000
@@ -34,6 +35,9 @@ class Settings(BaseSettings):
 
     # Hugging Face configuration
     HF_TOKEN: str | None = None
+
+    # CORS
+    BACKEND_CORS_ORIGINS: List[str] = ["*"]
 
     model_config = SettingsConfigDict(
         env_file=".env",
@@ -68,4 +72,4 @@ class Settings(BaseSettings):
     def max_model_len_type2(self) -> int:
         return self.MAX_MODEL_LEN_TYPE2 if self.MAX_MODEL_LEN_TYPE2 is not None else self.MAX_MODEL_LEN
 
-settings = Settings()
+configs = Configs()
